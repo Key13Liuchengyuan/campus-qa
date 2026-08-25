@@ -197,6 +197,19 @@
     display: inline-block; font-size: 11px; font-weight: 700; color: var(--brand);
     background: #ffe9e0; padding: 2px 10px; border-radius: 999px; margin-bottom: 6px;
   }
+  /* ===== Layer 4：回答反馈按钮 ===== */
+  .reply-card .reply-fb {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-top: 10px; padding-top: 10px; border-top: 1px dashed #f0d8c8;
+  }
+  .reply-card .reply-fb .fb-q { font-size: 12.5px; color: var(--muted); }
+  .reply-card .reply-fb .fb-btn {
+    border: 1.5px solid rgba(139,0,0,0.25); background: #fff; color: var(--brand);
+    font-size: 12.5px; font-weight: 600; padding: 5px 12px; border-radius: 999px;
+    cursor: pointer; transition: all .18s ease;
+  }
+  .reply-card .reply-fb .fb-btn:hover:not(:disabled) { background: var(--brand); color: #fff; }
+  .reply-card .reply-fb .fb-btn:disabled { opacity: .55; cursor: default; }
 
   /* ===== 底部 ===== */
   .foot {
@@ -377,6 +390,7 @@
       <button class="btn ghost" onclick="setToken()">🔑 设置Token</button>
       <button class="btn ghost" onclick="openAI()">🤖 AI设置</button>
       <button class="btn ghost" onclick="exportQA()">⬇ 导出</button>
+      <button class="btn ghost" onclick="exportFeedback()">📊 导出反馈</button>
       <button class="btn danger" onclick="resetQA()">↺ 恢复默认</button>
     </div>
     <div class="count" id="qaCount"></div>
@@ -460,6 +474,8 @@ const FALLBACKS = [
   "哎呀这个我还真不太确定，怕给你说错了。你问问辅导员或者去学校官方便民渠道核一下比较稳妥～别的我懂的尽管问哈！",
   "这个我不太敢乱说，怕误导你。可以问问学长学姐、班导，或者看学校发的入学须知～有其他问题我随时在！",
 ];
+// 知识库完全匹配不到时的兜底（不调 AI 自由发挥）
+const FALLBACK_NOMATCH = "这个问题超出了我的知识范围😅 建议你：\n- 打招生办电话：027-88023266\n- 加你们学院的官方新生QQ群咨询\n- 或者换个方式问我试试？";
 const QUIT_WORDS = new Set(["退出","再见","拜拜","结束","exit","quit","q","不聊了"]);
 const HELP_WORDS = new Set(["帮助","help","?","？","菜单","列表","所有问题"]);
 const ALIASES = {
@@ -487,15 +503,32 @@ function tokens(s){
 }
 function refreshTokens(qa){ for(const it of qa){ it.toks = tokens(it.q); } buildIdf(qa); }
 
-// 解析 Q:/A: 格式文本为数组
+// 解析 问答库文本为数组；支持可选 K: 关键词行（Q:/K:/A: 顺序无关，块间以空行分隔）
 function parseQA(text){
-  const re = /Q:\s*([\s\S]*?)\nA:\s*([\s\S]*?)\n\n/g;
-  const out = []; let m;
-  while((m = re.exec(text))){ const q=m[1].trim(), a=m[2].trim(); if(q&&a) out.push({q,a}); }
+  const out = [];
+  const blocks = String(text || "").split(/\n\n+/);
+  for(const blk of blocks){
+    if(!blk.trim()) continue;
+    const qm = blk.match(/^Q:\s*(.*)$/m);
+    const km = blk.match(/^K:\s*(.*)$/m);
+    const am = blk.match(/^A:\s*([\s\S]*)$/m);
+    if(qm && am){
+      const q = qm[1].trim(), a = am[1].trim();
+      const kw = km ? km[1].split(/[,，]/).map(s=>s.trim()).filter(Boolean) : [];
+      if(q && a) out.push({ q, a, keywords: kw });
+    }
+  }
   return out;
 }
+// 把问答数组序列化为文本（用于云端保存 / 导出），保留关键词
+function qaToText(qa){
+  return qa.filter(it=>it.q&&it.a).map(it => {
+    const k = (it.keywords && it.keywords.length) ? "K: " + it.keywords.join(",") + "\n" : "";
+    return "Q: " + it.q.trim() + "\n" + k + "A: " + it.a.trim() + "\n";
+  }).join("\n");
+}
 function getLocal(){ try { const r = localStorage.getItem(LS_QA); if(r){ const a=JSON.parse(r); if(Array.isArray(a)&&a.length) return a; } } catch(e){} return null; }
-function saveLocal(qa){ try { localStorage.setItem(LS_QA, JSON.stringify(qa.map(({q,a})=>({q:q.trim(),a:a.trim()})))); } catch(e){} }
+function saveLocal(qa){ try { localStorage.setItem(LS_QA, JSON.stringify(qa.map(it=>({ q:it.q.trim(), a:it.a.trim(), keywords: Array.isArray(it.keywords)?it.keywords:[] })))); } catch(e){} }
 
 // 加载问答库：先本地缓存（快），再拉云端（最新）
 async function loadQA(){
@@ -583,22 +616,51 @@ function toggleCard(qEl){
   qEl.closest(".qa-card").classList.toggle("open");
 }
 
-// 提问后：在列表顶部插入学长回答卡
-function addReply(text, highlightQ){
+// 提问后：在列表顶部插入学长回答卡（opts.feedback=false 时不显示反馈按钮）
+function addReply(text, highlightQ, opts){
+  opts = opts || {};
   const card = document.createElement("div");
   card.className = "reply-card";
+  const fbId = "fb_" + Date.now() + "_" + Math.floor(Math.random()*1e6);
+  const fbHtml = (opts.feedback === false) ? '' :
+    '<div class="reply-fb" id="' + fbId + '">' +
+      '<span class="fb-q">这个回答有帮助吗？</span>' +
+      '<button class="fb-btn up" type="button">👍 有用</button>' +
+      '<button class="fb-btn down" type="button">👎 不对</button>' +
+    '</div>';
   card.innerHTML =
     '<div class="qa-avatar">🎓</div>' +
     '<div class="qa-main">' +
       '<span class="reply-tag">首义学长</span>' +
       '<div class="qa-a">' + escHtml(text) + '</div>' +
+      fbHtml +
     '</div>';
   qaList.prepend(card);
+  if(opts.feedback !== false){
+    const fbBox = card.querySelector('.reply-fb');
+    if(fbBox){
+      fbBox.querySelector('.up').addEventListener('click', ()=>recordFeedback(fbId, 'up', fbBox));
+      fbBox.querySelector('.down').addEventListener('click', ()=>recordFeedback(fbId, 'down', fbBox));
+    }
+  }
   if(highlightQ){
     const target = document.querySelector('.qa-card[data-q="' + CSS.escape(highlightQ) + '"]');
     if(target){ target.classList.add("match"); target.classList.add("open"); }
   }
   card.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+// Layer 4：👍/👎 反馈收集（仅存本机浏览器，管理员可导出）
+function recordFeedback(id, type, box){
+  try {
+    let arr = [];
+    try { const r = localStorage.getItem('wsy_feedback_v1'); if(r) arr = JSON.parse(r) || []; } catch(e){}
+    arr.push({ id: id, type: type, t: new Date().toISOString() });
+    localStorage.setItem('wsy_feedback_v1', JSON.stringify(arr));
+  } catch(e){}
+  const btns = box.querySelectorAll('.fb-btn');
+  btns.forEach(b => b.disabled = true);
+  const tip = box.querySelector('.fb-q');
+  if(tip) tip.textContent = (type === 'up') ? '感谢你的反馈 💛' : '收到，我会继续改进 🙏';
 }
 
 function send(){
@@ -643,9 +705,30 @@ function topMatches(userQ, k){
   }
   return arr.filter(x => x.score >= 0.05).sort((a,b)=>b.score-a.score).slice(0, k);
 }
+
+// ===== Layer 3：前端关键词检索（发给 AI 前先做，取最相关 1-3 条）=====
+// 优先用知识库自带的关键词命中，相似度作为兜底，分数加权后取 top-k
+function findRelevantKnowledge(userQ, k){
+  const u = normalize(userQ);
+  const scored = QA.map(it => {
+    const kws = (it.keywords || []).filter(kw => kw && u.indexOf(normalize(kw)) !== -1);
+    const sim = similarity(userQ, it.q);
+    return { q: it.q, a: it.a, kwHit: kws.length, sim, score: kws.length * 3 + sim };
+  });
+  for(const key in ALIASES){
+    if(key && u.indexOf(key) !== -1){
+      for(const it of QA){ if(it.q === ALIASES[key]){ const e = scored.find(x => x.q === it.q); if(e){ e.kwHit = Math.max(e.kwHit, 1); e.score = Math.max(e.score, 0.99); } } }
+    }
+  }
+  return scored.filter(x => x.kwHit > 0 || x.sim >= 0.25)
+               .sort((a, b) => b.score - a.score)
+               .slice(0, k);
+}
 // 暴露给 RAG module（module 作用域读取不到 classic 的 const 数组）
 window.OPENERS = OPENERS; window.CLOSERS = CLOSERS; window.FALLBACKS = FALLBACKS;
+window.FALLBACK_NOMATCH = FALLBACK_NOMATCH;   // Layer 4：无匹配兜底文案
 window.getQA = getQA; window.isQALoaded = isQALoaded; window.loadAICfg = loadAICfg; window.topMatches = topMatches;
+window.findRelevantKnowledge = findRelevantKnowledge;   // Layer 3：关键词优先检索
 
 const inp = document.getElementById("inp");
 inp.addEventListener("keydown", e=>{ if(e.key==="Enter") send(); });
@@ -727,17 +810,18 @@ function renderEdit(){
   document.getElementById("qaCount").textContent = "共 " + QA.length + " 条";
   const box = document.getElementById("qaEdit");
   box.innerHTML = "";
-  QA.forEach((it, i)=>{
+    QA.forEach((it, i)=>{
     const div = document.createElement("div");
     div.className = "qa-item";
     div.innerHTML = "<span class='qidx'>#" + (i+1) + "</span><button class='del' onclick='delItem(" + i + ")'>删除</button>" +
       "<div class='field'><label>问题</label><input oninput='QA[" + i + "].q=this.value; LOCAL_DIRTY=true;' value='" + escAttr(it.q) + "' /></div>" +
+      "<div class='field'><label>关键词（逗号分隔，用于检索匹配）</label><input oninput='QA[" + i + "].keywords=this.value.split(/[,，]/).map(s=>s.trim()).filter(Boolean); LOCAL_DIRTY=true;' value='" + escAttr((it.keywords||[]).join(",")) + "' /></div>" +
       "<div class='field'><label>答案</label><textarea oninput='QA[" + i + "].a=this.value; LOCAL_DIRTY=true;'>" + escHtml(it.a) + "</textarea></div>";
     box.appendChild(div);
   });
 }
 function addItem(){
-  QA.push({ q: "新问题？", a: "新答案", toks: new Set() });
+  QA.push({ q: "新问题？", a: "新答案", keywords: [], toks: new Set() });
   LOCAL_DIRTY = true;
   refreshTokens(QA);
   renderEdit();
@@ -745,7 +829,7 @@ function addItem(){
 }
 function delItem(i){ QA.splice(i, 1); LOCAL_DIRTY = true; refreshTokens(QA); renderEdit(); }
 function saveLocalQA(){
-  QA = QA.filter(it => it.q && it.a).map(it => ({ q: it.q.trim(), a: it.a.trim() }));
+  QA = QA.filter(it => it.q && it.a).map(it => ({ q: it.q.trim(), a: it.a.trim(), keywords: Array.isArray(it.keywords)?it.keywords:[] }));
   refreshTokens(QA);
   saveLocal(QA);
   LOCAL_DIRTY = true;
@@ -786,7 +870,7 @@ function saveAI(){
   closeAI();
 }
 function exportQA(){
-  const lines = QA.filter(it=>it.q&&it.a).map(it => "Q: " + it.q.trim() + "\nA: " + it.a.trim() + "\n").join("\n");
+  const lines = qaToText(QA);
   const blob = new Blob([lines], { type: "text/plain;charset=utf-8" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -794,6 +878,22 @@ function exportQA(){
   a.click();
   URL.revokeObjectURL(a.href);
   alert("已导出 qa_data.txt 作为本地备份 💾\n（如要同步给所有人，点「☁ 保存到云端」即可，无需手动导出）");
+}
+// Layer 4：导出访客反馈（👍有用 / 👎不对），仅来自本机浏览器
+function exportFeedback(){
+  let arr = [];
+  try { const r = localStorage.getItem('wsy_feedback_v1'); if(r) arr = JSON.parse(r) || []; } catch(e){}
+  const up = arr.filter(x => x.type === 'up').length;
+  const down = arr.filter(x => x.type === 'down').length;
+  const lines = "首义学长 · 回答反馈统计\n================\n👍 有用：" + up + " 条\n👎 不对：" + down + " 条\n总反馈：" + arr.length + " 条\n\n明细：\n时间\t类型\n" +
+    arr.map(x => x.t + "\t" + (x.type === 'up' ? '👍有用' : '👎不对')).join("\n");
+  const blob = new Blob([lines], { type: "text/plain;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "feedback.txt";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  alert("已导出反馈数据 📊\n👍 有用 " + up + " 条 / 👎 不对 " + down + " 条\n（数据仅来自你本机浏览器，不含其他访客）");
 }
 async function saveToCloud(){
   const tok = ensureToken(false);
@@ -805,9 +905,9 @@ async function saveToCloud(){
     if(!getR.ok) throw new Error("读取仓库文件失败 " + getR.status);
     const sha = (await getR.json()).sha;
     // 2. 组装内容
-    QA = QA.filter(it => it.q && it.a).map(it => ({ q: it.q.trim(), a: it.a.trim() }));
+    QA = QA.filter(it => it.q && it.a).map(it => ({ q: it.q.trim(), a: it.a.trim(), keywords: Array.isArray(it.keywords)?it.keywords:[] }));
     refreshTokens(QA);
-    const content = QA.map(it => "Q: " + it.q + "\nA: " + it.a + "\n\n").join("");
+    const content = qaToText(QA);
     const b64 = btoa(unescape(encodeURIComponent(content)));
     // 3. 写回
     const putR = await fetch("https://api.github.com/repos/" + GH.owner + "/" + GH.repo + "/contents/" + GH.path, {
@@ -970,13 +1070,32 @@ RAG.retrieve = async (q, k) => {
       }
     } catch(e){ console.warn('[RAG] 向量检索失败，退回全文', e); }
   }
+  // Layer 3：全文兜底优先用关键词命中（知识库自带 keywords 字段）
+  if(typeof window.findRelevantKnowledge === 'function'){
+    const kw = window.findRelevantKnowledge(q, k);
+    if(kw.length) return kw;
+  }
   return (typeof window.topMatches === 'function') ? window.topMatches(q, k) : [];
 };
 
 async function askAI(q, context){
   const cfg = aiCfg();
   const url = (cfg.baseURL||'').replace(/\/+$/,'') + '/chat/completions';
-  const sys = '你是武昌首义学院的「首义学长」，一位温和亲切的学长，用简体中文回答新生的问题。';
+  // Layer 1：首义学长人设系统提示词（来自 首义1.txt）
+  const sys = `你是"首义学长"，一个在武昌首义学院（原华中科技大学武昌分校）生活了四年的热心学长。你说话亲切、接地气，偶尔会用一些网络用语和emoji，像一个真实的学长在微信上跟学弟学妹聊天一样。
+
+【回答规则】
+1. 严格基于下方【校园知识库】中的信息回答，不要编造不存在的内容
+2. 如果知识库中没有相关信息，坦诚说"这个我还真不太清楚，建议你直接问辅导员或者打招生办电话 027-88023266 确认一下哈～"
+3. 回答要简洁实用，不要写论文式的长篇大论，控制在3-5句话以内
+4. 如果问题模糊，先反问确认，比如"你是问本科还是专科呀？"
+5. 适当加一些实用小贴士，比如"建议提前加一下你们学院的迎新QQ群哦"
+
+【语言风格】
+- 用"你"而不是"您"，用"咱们学校"而不是"该校"
+- 可以用"哈哈""emmm""～"等语气词
+- 重要信息用【】标注，比如【0.9m×2.0m】
+- 结尾可以加一句贴心的话，比如"有啥问题随时问我！"`;
   const user = '请根据以下【参考资料】回答用户的问题。\n要求：\n1. 只依据资料作答，不要编造资料以外的内容；\n2. 资料里没有相关信息时，如实说“这个我还不太确定，建议你问问辅导员或班导”；\n3. 语气亲切，像学长在跟学弟学妹聊天。\n\n【参考资料】\n' + context + '\n\n用户的问题是：' + q;
   const r = await fetch(url, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+cfg.key }, body: JSON.stringify({ model: cfg.chatModel, messages:[{role:'system',content:sys},{role:'user',content:user}], temperature:0.7, max_tokens:600 }) });
   if(!r.ok) throw new Error('chat '+r.status);
@@ -996,8 +1115,14 @@ RAG.send = async (rawV) => {
   const modeLabel = (RAG.embedSrc === 'local') ? '本地语义检索' : ((RAG.embedSrc === 'api') ? '语义检索' : '关键词检索');
   status.textContent = '🔍 正在' + modeLabel + '相关资料…';
   let hits = [];
-  try { hits = await RAG.retrieve(v, 3); } catch(e){ hits = (window.topMatches?window.topMatches(v,3):[]); }
+  try { hits = await RAG.retrieve(v, 3); } catch(e){ hits = (window.findRelevantKnowledge?window.findRelevantKnowledge(v,3):(window.topMatches?window.topMatches(v,3):[])); }
   const cfg = aiCfg();
+  // Layer 4：没有检索到任何相关知识点 → 直接给兜底文案，不调 AI（避免答非所问）
+  if(!hits.length){
+    window.addReply(window.FALLBACK_NOMATCH, null, { feedback: false });
+    status.textContent = defaultStatus();
+    return;
+  }
   let answer = null, isAI = false;
   if(cfg && cfg.enabled && cfg.key){
     status.textContent = '🤖 学长思考中…';
@@ -1009,7 +1134,7 @@ RAG.send = async (rawV) => {
   } else {
     answer = hits[0] ? hits[0].a : null;
   }
-  if(!answer){ window.addReply(window.pick(window.FALLBACKS)); status.textContent = defaultStatus(); return; }
+  if(!answer){ window.addReply(window.FALLBACK_NOMATCH, null, { feedback: false }); status.textContent = defaultStatus(); return; }
   if(isAI){
     window.addReply(answer + AI_DISCLAIMER);
   } else {
