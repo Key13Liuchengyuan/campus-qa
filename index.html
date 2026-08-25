@@ -3,147 +3,384 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>武昌首义学院 · 校园问答小助手</title>
+<title>武昌首义学院 · 首义学长校园问答</title>
 <style>
+  /* ============ 新中式校园风 ============ */
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --bg: #fff7f0; --card: #ffffff; --brand: #ff7a45; --brand2: #ffa940;
-    --me: #ff7a45; --bot: #f6f7fb; --text: #2b2b2b; --muted: #9aa0a6;
+    --brand: #8B0000;          /* 首义红 */
+    --brand2: #B22222;         /* 砖红 */
+    --bg: #FDFBF7;             /* 米白 */
+    --card: #FFFFFF;
+    --text: #2b2b2b;
+    --muted: #9aa0a6;
+    --line: #f0e6dd;
+    --radius: 14px;
+    --shadow: 0 6px 24px rgba(139,0,0,0.08);
+    --serif: "Songti SC", "STSong", "SimSun", "Noto Serif SC", serif;
+    --sans: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
   }
+  html { scroll-behavior: smooth; }
   body {
-    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
-    background: linear-gradient(160deg, #fff1e6 0%, #ffe9f0 100%);
+    font-family: var(--sans);
+    background: var(--bg);
     color: var(--text);
-    min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
-  .app {
-    width: 100%; max-width: 480px; height: min(86vh, 760px);
-    background: var(--card); border-radius: 22px;
-    box-shadow: 0 18px 50px rgba(255,122,69,0.18);
-    display: flex; flex-direction: column; overflow: hidden; position: relative;
-  }
-  .top {
-    background: linear-gradient(135deg, var(--brand) 0%, var(--brand2) 100%);
-    color: #fff; padding: 16px 18px; display: flex; align-items: center; gap: 12px;
-  }
-  .avatar { width: 42px; height: 42px; border-radius: 50%; background: #fff; display: flex; align-items: center; justify-content: center; font-size: 24px; flex: 0 0 auto; }
-  .top .name { font-size: 16px; font-weight: 700; }
-  .top .status { font-size: 12px; opacity: 0.9; margin-top: 2px; }
-  .top .actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-  .top .actions button { background: rgba(255,255,255,0.22); border: none; color: #fff; font-size: 12px; padding: 6px 10px; border-radius: 999px; cursor: pointer; }
-  .top .actions button:hover { background: rgba(255,255,255,0.35); }
-  .top .actions button.admin { background: #fff; color: var(--brand); font-weight: 700; }
-  .chat { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: var(--bg); }
-  .msg { max-width: 82%; line-height: 1.6; font-size: 14.5px; white-space: pre-wrap; word-break: break-word; }
-  .msg.bot { align-self: flex-start; background: var(--bot); padding: 11px 14px; border-radius: 4px 16px 16px 16px; }
-  .msg.me { align-self: flex-end; background: var(--me); color: #fff; padding: 11px 14px; border-radius: 16px 4px 16px 16px; }
-  .msg .who { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
-  .msg.me .who { color: rgba(255,255,255,0.8); }
-  .typing { align-self: flex-start; display: flex; gap: 4px; padding: 12px 14px; background: var(--bot); border-radius: 4px 16px 16px 16px; }
-  .typing span { width: 7px; height: 7px; background: #c7cbd1; border-radius: 50%; animation: blink 1.2s infinite; }
-  .typing span:nth-child(2){ animation-delay: .2s; } .typing span:nth-child(3){ animation-delay: .4s; }
-  @keyframes blink { 0%,60%,100%{ opacity:.3; transform: translateY(0);} 30%{ opacity:1; transform: translateY(-3px);} }
-  .inputbar { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #f0f0f0; background: #fff; }
-  .inputbar input { flex: 1; border: 1.5px solid #ffe0cf; border-radius: 999px; padding: 11px 16px; font-size: 14.5px; outline: none; background: #fffdfb; }
-  .inputbar input:focus { border-color: var(--brand); }
-  .inputbar button { border: none; background: linear-gradient(135deg, var(--brand), var(--brand2)); color: #fff; font-size: 14px; font-weight: 600; padding: 0 20px; border-radius: 999px; cursor: pointer; }
-  .inputbar button:active { transform: scale(0.96); }
-  .chips { display: flex; flex-wrap: wrap; gap: 7px; padding: 0 12px 10px; background:#fff; }
-  .chips button { border: 1px solid #ffd9c2; background: #fff6f0; color: var(--brand); font-size: 12px; padding: 6px 11px; border-radius: 999px; cursor: pointer; }
-  .chips button:hover { background: #ffe9dc; }
-  .help-list { max-height: 240px; overflow-y: auto; }
-  .help-list div { padding: 5px 0; border-bottom: 1px dashed #eee; font-size: 13px; }
-  ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-thumb { background: #ffd0b8; border-radius: 3px; }
 
-  /* 遮罩层（登录 / 管理后台） */
-  .overlay { position: absolute; inset: 0; background: rgba(40,20,10,0.45); backdrop-filter: blur(3px); display: none; align-items: center; justify-content: center; z-index: 10; padding: 18px; }
+  /* ===== 顶部导航 ===== */
+  .nav {
+    width: 100%;
+    max-width: 860px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 20px 8px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo .emblem {
+    width: 40px; height: 40px; border-radius: 12px;
+    background: linear-gradient(135deg, var(--brand), var(--brand2));
+    color: #fff; font-size: 20px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 12px rgba(139,0,0,0.28);
+  }
+  .logo .name {
+    font-family: var(--serif);
+    font-weight: 800; font-size: 21px; color: var(--brand);
+    letter-spacing: 1px;
+  }
+  .logo .name small { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 6px; font-family: var(--sans); }
+  .nav-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .nav-btns button {
+    border: 1.5px solid rgba(139,0,0,0.25);
+    background: #fff; color: var(--brand);
+    font-size: 13px; font-weight: 600;
+    padding: 8px 16px; border-radius: 999px;
+    cursor: pointer; transition: all .2s ease;
+  }
+  .nav-btns button:hover {
+    background: var(--brand); color: #fff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(139,0,0,0.25);
+  }
+  .nav-btns button.admin { background: var(--brand); color: #fff; }
+  .nav-btns button.admin:hover { background: var(--brand2); }
+
+  /* ===== Hero 核心交互区 ===== */
+  .hero {
+    width: 100%; max-width: 860px;
+    padding: 26px 20px 8px;
+    display: flex; flex-direction: column; align-items: center; gap: 18px;
+  }
+  .welcome-card {
+    width: 100%;
+    background: linear-gradient(135deg, #8B0000 0%, #B22222 55%, #c0392b 100%);
+    border-radius: 20px;
+    padding: 26px 28px;
+    color: #fff;
+    box-shadow: 0 12px 34px rgba(139,0,0,0.25);
+    position: relative; overflow: hidden;
+  }
+  .welcome-card::after {
+    content: "首义"; position: absolute; right: -14px; bottom: -26px;
+    font-family: var(--serif); font-size: 110px; font-weight: 900;
+    color: rgba(255,255,255,0.07); pointer-events: none; letter-spacing: 4px;
+  }
+  .welcome-inner { display: flex; align-items: center; gap: 18px; position: relative; z-index: 1; }
+  .w-avatar {
+    width: 62px; height: 62px; border-radius: 50%;
+    background: rgba(255,255,255,0.95); color: var(--brand);
+    font-size: 34px; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.2); flex: 0 0 auto;
+  }
+  .w-text h1 { font-family: var(--serif); font-size: 22px; font-weight: 800; margin-bottom: 6px; letter-spacing: 1px; }
+  .w-text p { font-size: 14px; line-height: 1.7; opacity: 0.95; }
+
+  .search-box {
+    width: 100%;
+    display: flex; align-items: center; gap: 10px;
+    background: var(--card);
+    border: 2px solid #f0e2d6;
+    border-radius: 999px;
+    padding: 6px 8px 6px 20px;
+    box-shadow: var(--shadow);
+    transition: border-color .2s ease, box-shadow .2s ease;
+  }
+  .search-box:focus-within { border-color: var(--brand); box-shadow: 0 6px 28px rgba(139,0,0,0.14); }
+  .search-box .s-icon { color: var(--brand); font-size: 17px; opacity: 0.75; flex: 0 0 auto; }
+  .search-box input {
+    flex: 1; border: none; outline: none;
+    font-size: 15px; font-family: var(--sans);
+    background: transparent; color: var(--text); padding: 10px 0;
+  }
+  .search-box input::placeholder { color: #c3b8ae; }
+  .search-box .send-btn {
+    border: none; background: linear-gradient(135deg, var(--brand), var(--brand2));
+    color: #fff; font-size: 14px; font-weight: 700;
+    padding: 12px 26px; border-radius: 999px; cursor: pointer;
+    transition: transform .15s ease, box-shadow .2s ease;
+  }
+  .search-box .send-btn:hover { transform: scale(1.03); box-shadow: 0 4px 14px rgba(139,0,0,0.35); }
+  .search-box .send-btn:active { transform: scale(0.97); }
+
+  .hot-tags { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
+  .hot-tags .tag-label { font-size: 12.5px; color: var(--muted); margin-right: 2px; }
+  .hot-tags button {
+    border: 1.5px solid var(--brand); background: #fff; color: var(--brand);
+    font-size: 12.5px; font-weight: 600; padding: 6px 13px; border-radius: 999px;
+    cursor: pointer; transition: all .18s ease;
+  }
+  .hot-tags button:hover { background: var(--brand); color: #fff; transform: translateY(-1px); }
+  .status { font-size: 12.5px; color: var(--muted); text-align: center; min-height: 18px; }
+
+  /* ===== 问答展示区（卡片列表）===== */
+  .content { width: 100%; max-width: 860px; padding: 10px 20px 30px; flex: 1; }
+  .section-title {
+    font-family: var(--serif); font-size: 16px; font-weight: 800; color: var(--brand);
+    display: flex; align-items: center; gap: 8px; margin: 14px 0 12px;
+  }
+  .section-title::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, #e8d5c4, transparent); }
+  .qa-list { display: flex; flex-direction: column; gap: 12px; }
+
+  .qa-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: 0 3px 14px rgba(139,0,0,0.05);
+    padding: 14px 16px;
+    display: flex; gap: 13px;
+    transition: box-shadow .2s ease, transform .2s ease;
+  }
+  .qa-card:hover { box-shadow: 0 6px 22px rgba(139,0,0,0.1); }
+  .qa-card.match { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(139,0,0,0.12), 0 6px 22px rgba(139,0,0,0.12); }
+  .qa-avatar {
+    width: 42px; height: 42px; border-radius: 50%; flex: 0 0 auto;
+    background: linear-gradient(135deg, var(--brand), var(--brand2));
+    color: #fff; font-size: 21px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 3px 10px rgba(139,0,0,0.22);
+  }
+  .qa-main { flex: 1; min-width: 0; }
+  .qa-q {
+    font-weight: 700; font-size: 15px; color: #3a2f2a;
+    cursor: pointer; display: flex; align-items: center; gap: 8px;
+    line-height: 1.55;
+  }
+  .qa-q .chev { margin-left: auto; color: var(--muted); font-size: 12px; transition: transform .25s ease; flex: 0 0 auto; }
+  .qa-card.open .qa-q .chev { transform: rotate(180deg); color: var(--brand); }
+  .qa-a {
+    max-height: 0; overflow: hidden;
+    transition: max-height .35s ease, margin .3s ease, opacity .3s ease;
+    opacity: 0; margin-top: 0;
+    font-size: 14px; line-height: 1.75; color: #555;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .qa-card.open .qa-a { max-height: 600px; opacity: 1; margin-top: 8px; }
+
+  /* 学长回答卡（提问后置顶展示） */
+  .reply-card {
+    background: linear-gradient(135deg, #fff8f3, #fff);
+    border: 1.5px solid #f3ddd0;
+    border-radius: var(--radius);
+    box-shadow: 0 6px 22px rgba(139,0,0,0.1);
+    padding: 16px;
+    display: flex; gap: 13px;
+  }
+  .reply-card .qa-a { max-height: none; opacity: 1; margin-top: 2px; color: #3d342f; }
+  .reply-card .reply-tag {
+    display: inline-block; font-size: 11px; font-weight: 700; color: var(--brand);
+    background: #ffe9e0; padding: 2px 10px; border-radius: 999px; margin-bottom: 6px;
+  }
+
+  /* ===== 底部 ===== */
+  .foot {
+    width: 100%; padding: 20px;
+    display: flex; flex-wrap: wrap; gap: 10px;
+    align-items: center; justify-content: space-between;
+    border-top: 1px solid var(--line);
+    font-size: 12.5px; color: var(--muted);
+  }
+  .foot .foot-btn {
+    border: 1.5px solid rgba(139,0,0,0.3); background: #fff; color: var(--brand);
+    font-size: 12.5px; padding: 7px 16px; border-radius: 999px; cursor: pointer;
+    transition: all .2s ease; font-weight: 600;
+  }
+  .foot .foot-btn:hover { background: var(--brand); color: #fff; }
+
+  /* ===== 遮罩层（登录 / 管理后台 / 二维码）===== */
+  .overlay {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(30,15,8,0.5); backdrop-filter: blur(4px);
+    display: none; align-items: center; justify-content: center; padding: 18px;
+  }
   .overlay.show { display: flex; }
-  .panel { width: 100%; max-width: 420px; max-height: 92%; background: #fff; border-radius: 18px; padding: 20px; display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(0,0,0,0.2); }
-  .panel h3 { font-size: 17px; margin-bottom: 4px; color: var(--brand); }
-  .panel .sub { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+  .panel {
+    width: 100%; max-width: 440px; max-height: 92%;
+    background: #fff; border-radius: 18px; padding: 22px;
+    display: flex; flex-direction: column;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.25);
+    overflow-y: auto;
+  }
+  .panel h3 { font-family: var(--serif); font-size: 18px; color: var(--brand); margin-bottom: 4px; }
+  .panel .sub { font-size: 12.5px; color: var(--muted); margin-bottom: 16px; line-height: 1.6; }
   .field { margin-bottom: 12px; }
-  .field label { display: block; font-size: 13px; margin-bottom: 5px; color: #555; }
-  .field input, .field textarea { width: 100%; border: 1.5px solid #ffd9c2; border-radius: 10px; padding: 10px 12px; font-size: 14px; outline: none; font-family: inherit; }
+  .field label { display: block; font-size: 13px; margin-bottom: 5px; color: #555; font-weight: 600; }
+  .field input, .field textarea {
+    width: 100%; border: 1.5px solid #f0e0d2; border-radius: 10px;
+    padding: 10px 12px; font-size: 14px; outline: none; font-family: inherit;
+    background: #fffdfb;
+  }
   .field input:focus, .field textarea:focus { border-color: var(--brand); }
   .field textarea { resize: vertical; min-height: 60px; }
   .btn-row { display: flex; gap: 8px; margin-top: 6px; }
-  .btn { flex: 1; border: none; border-radius: 10px; padding: 11px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .btn { flex: 1; border: none; border-radius: 10px; padding: 11px; font-size: 14px; font-weight: 600; cursor: pointer; transition: transform .12s ease; }
+  .btn:active { transform: scale(0.97); }
   .btn.primary { background: linear-gradient(135deg, var(--brand), var(--brand2)); color: #fff; }
-  .btn.ghost { background: #f3f4f6; color: #555; }
-  .btn.danger { background: #fff0f0; color: #e04848; }
+  .btn.ghost { background: #f3f0ec; color: #555; }
+  .btn.danger { background: #fff0f0; color: #d33; }
   .btn.cloud { background: #1f883d; color: #fff; }
-  .err { color: #e04848; font-size: 12.5px; min-height: 16px; margin-top: 4px; }
+  .err { color: #d33; font-size: 12.5px; min-height: 16px; margin-top: 4px; }
+
+  /* ===== 管理后台：科技蓝 / 深灰 ===== */
+  .admin-panel { background: #141b2b; color: #dbe4f0; border: 1px solid #22304a; }
+  .admin-panel h3 { color: #4da3ff; }
+  .admin-panel .sub { color: #7d8db0; }
+  .admin-panel .field label { color: #9fb0cf; }
+  .admin-panel .field input, .admin-panel .field textarea {
+    background: #0e1420; color: #dbe4f0; border-color: #2a3a58;
+  }
+  .admin-panel .field input:focus, .admin-panel .field textarea:focus { border-color: #4da3ff; }
+  .admin-panel .btn.primary { background: linear-gradient(135deg, #2563eb, #3b82f6); color: #fff; }
+  .admin-panel .btn.ghost { background: #22304a; color: #9fb0cf; }
+  .admin-panel .btn.danger { background: rgba(220,38,38,0.18); color: #f87171; }
+  .admin-panel .btn.cloud { background: #16a34a; color: #fff; }
+  .admin-panel .qa-item { border-color: #2a3a58; background: #0e1420; }
+  .admin-panel .qa-item .del { background: rgba(220,38,38,0.2); color: #f87171; }
+  .admin-panel .qa-item .qidx { color: #7d8db0; }
+  .admin-panel .count { color: #7d8db0; }
   .admin-tools { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
-  .admin-tools .btn { flex: none; padding: 8px 12px; font-size: 13px; }
-  .qa-edit { overflow-y: auto; flex: 1; border-top: 1px dashed #eee; padding-top: 10px; }
-  .qa-item { border: 1px solid #ffe3d2; border-radius: 12px; padding: 10px; margin-bottom: 10px; background: #fffaf6; }
+  .admin-tools .btn { flex: none; padding: 8px 12px; font-size: 12.5px; }
+  .qa-edit { overflow-y: auto; flex: 1; border-top: 1px dashed #2a3a58; padding-top: 10px; max-height: 46vh; }
+  .qa-item { border: 1px solid #f0e0d2; border-radius: 12px; padding: 10px; margin-bottom: 10px; background: #fffaf6; }
   .qa-item .del { float: right; border: none; background: #ffe3e3; color: #d33; border-radius: 8px; padding: 3px 9px; font-size: 12px; cursor: pointer; }
   .qa-item .qidx { font-size: 11px; color: var(--muted); }
   .count { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
 
-  /* 学长微信二维码弹窗 */
-  .qr-card { text-align: center; }
-  .qr-card img { width: 100%; max-width: 280px; border-radius: 12px; border: 1px solid #ffe3d2; margin: 6px 0 10px; }
+  /* 二维码弹窗 */
+  .qr-card { text-align: center; max-width: 340px; }
+  .qr-card img { width: 100%; max-width: 250px; border-radius: 12px; border: 1px solid var(--line); margin: 6px 0 10px; }
   .qr-card .tip { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-thumb { background: #e5c9b8; border-radius: 3px; }
+
+  /* 加载动画 */
+  .loading-dots { display: inline-flex; gap: 5px; }
+  .loading-dots span { width: 7px; height: 7px; background: var(--brand); border-radius: 50%; opacity: .35; animation: blink 1.2s infinite; }
+  .loading-dots span:nth-child(2){ animation-delay: .2s; }
+  .loading-dots span:nth-child(3){ animation-delay: .4s; }
+  @keyframes blink { 0%,60%,100%{ opacity:.3; transform: translateY(0);} 30%{ opacity:1; transform: translateY(-3px);} }
+
+  @media (max-width: 560px) {
+    .nav { padding: 14px 16px 6px; }
+    .logo .name { font-size: 18px; }
+    .welcome-card { padding: 20px 18px; }
+    .w-avatar { width: 52px; height: 52px; font-size: 28px; }
+    .w-text h1 { font-size: 19px; }
+    .search-box .send-btn { padding: 11px 18px; }
+    .hero, .content { padding-left: 14px; padding-right: 14px; }
+  }
 </style>
 </head>
 <body>
-<div class="app" id="app">
-  <div class="top">
-    <div class="avatar">🎓</div>
-    <div>
-      <div class="name">首义学长 · 校园问答</div>
-      <div class="status" id="statusLine">正在加载问答库…</div>
-    </div>
-    <div class="actions">
-      <button onclick="refreshContent()">🔄 内容</button>
-      <button onclick="showHelp()">全部话题</button>
-      <button onclick="showQR()">💬 学长微信</button>
-      <button id="loginBtn" onclick="openLogin()">🔑 登录</button>
-      <button class="admin" id="adminBtn" style="display:none" onclick="openAdmin()">🛠 管理问答</button>
-      <button id="logoutBtn" style="display:none" onclick="logout()">退出登录</button>
-    </div>
-  </div>
-  <div class="chat" id="chat"></div>
-  <div class="chips" id="chips"></div>
-  <div class="inputbar">
-    <input id="inp" placeholder="直接输入你的问题，比如：宿舍床多大？" autocomplete="off" />
-    <button onclick="send()">发送</button>
-  </div>
 
-  <!-- 登录遮罩 -->
-  <div class="overlay" id="loginOverlay">
-    <div class="panel">
-      <h3>🔐 管理员登录</h3>
-      <div class="sub">登录后即可随时增删改问答内容；改完点「☁ 保存到云端」同步给所有人</div>
-      <div class="field"><label>账号</label><input id="acc" placeholder="请输入账号" autocomplete="off" /></div>
-      <div class="field"><label>密码</label><input id="pwd" type="password" placeholder="请输入密码" autocomplete="off" onkeydown="if(event.key==='Enter')doLogin()" /></div>
-      <div class="err" id="loginErr"></div>
-      <div class="btn-row">
-        <button class="btn ghost" onclick="closeLogin()">取消</button>
-        <button class="btn primary" onclick="doLogin()">登录</button>
+<!-- ===== 顶部导航 ===== -->
+<header class="nav">
+  <div class="logo">
+    <div class="emblem">🎓</div>
+    <div class="name">首义学长<small>· 校园问答</small></div>
+  </div>
+  <div class="nav-btns">
+    <button onclick="scrollToQA()">📚 全部话题</button>
+    <button onclick="showQR()">💬 学长微信</button>
+    <button id="loginBtn" onclick="openLogin()">🔑 登录</button>
+    <button class="admin" id="adminBtn" style="display:none" onclick="openAdmin()">🛠 管理问答</button>
+    <button id="logoutBtn" style="display:none" onclick="logout()">退出登录</button>
+  </div>
+</header>
+
+<!-- ===== Hero 核心交互区 ===== -->
+<section class="hero">
+  <div class="welcome-card">
+    <div class="welcome-inner">
+      <div class="w-avatar">🎓</div>
+      <div class="w-text">
+        <h1>学弟学妹你好呀～</h1>
+        <p>我是首义的学长，关于学校吃住行、选课、宿舍、证件这些事儿都可以问我。直接输入问题，或者在下面点标签试试～</p>
       </div>
     </div>
   </div>
 
-  <!-- 管理后台遮罩 -->
-  <div class="overlay" id="adminOverlay">
-    <div class="panel">
-      <h3>🛠 问答管理后台</h3>
-      <div class="sub">登录后随时增删改；改完点「☁ 保存到云端」，GitHub Pages 自动重新部署，所有人刷新即见。</div>
-      <div class="admin-tools">
-        <button class="btn primary" onclick="addItem()">＋ 新增一条</button>
-        <button class="btn primary" onclick="saveLocalQA()">💾 存本机</button>
-        <button class="btn cloud" onclick="saveToCloud()">☁ 保存到云端</button>
-        <button class="btn ghost" onclick="setToken()">🔑 设置Token</button>
-        <button class="btn ghost" onclick="exportQA()">⬇ 导出备份</button>
-        <button class="btn danger" onclick="resetQA()">↺ 恢复默认</button>
-      </div>
-      <div class="count" id="qaCount"></div>
-      <div class="qa-edit" id="qaEdit"></div>
-      <div class="btn-row" style="margin-top:12px">
-        <button class="btn ghost" onclick="closeAdmin()">关闭</button>
-      </div>
+  <div class="search-box">
+    <span class="s-icon">🔍</span>
+    <input id="inp" placeholder="宿舍床多大？四级啥时候能考？…" autocomplete="off" />
+    <button class="send-btn" onclick="send()">提问</button>
+  </div>
+
+  <div class="hot-tags" id="hotTags"></div>
+  <div class="status" id="statusLine">正在加载问答库…</div>
+</section>
+
+<!-- ===== 问答展示区 ===== -->
+<main class="content">
+  <div class="section-title" id="qaTitle">📖 学长知道这些 · 点开看答案</div>
+  <div class="qa-list" id="qaList"></div>
+</main>
+
+<!-- ===== 底部 ===== -->
+<footer class="foot">
+  <span>© 2026 首义学长 · 武昌首义学院校园问答助手</span>
+  <button class="foot-btn" onclick="showQR()">💬 添加学长微信</button>
+</footer>
+
+<!-- 登录遮罩 -->
+<div class="overlay" id="loginOverlay">
+  <div class="panel">
+    <h3>🔐 管理员登录</h3>
+    <div class="sub">登录后即可随时增删改问答内容；改完点「☁ 保存到云端」同步给所有人</div>
+    <div class="field"><label>账号</label><input id="acc" placeholder="请输入账号" autocomplete="off" /></div>
+    <div class="field"><label>密码</label><input id="pwd" type="password" placeholder="请输入密码" autocomplete="off" onkeydown="if(event.key==='Enter')doLogin()" /></div>
+    <div class="err" id="loginErr"></div>
+    <div class="btn-row">
+      <button class="btn ghost" onclick="closeLogin()">取消</button>
+      <button class="btn primary" onclick="doLogin()">登录</button>
+    </div>
+  </div>
+</div>
+
+<!-- 管理后台遮罩（科技蓝 / 深灰） -->
+<div class="overlay" id="adminOverlay">
+  <div class="panel admin-panel">
+    <h3>🛠 问答管理后台</h3>
+    <div class="sub">登录后随时增删改；改完点「☁ 保存到云端」，GitHub Pages 自动重新部署，所有人刷新即见。</div>
+    <div class="admin-tools">
+      <button class="btn primary" onclick="addItem()">＋ 新增</button>
+      <button class="btn primary" onclick="saveLocalQA()">💾 存本机</button>
+      <button class="btn cloud" onclick="saveToCloud()">☁ 保存到云端</button>
+      <button class="btn ghost" onclick="setToken()">🔑 设置Token</button>
+      <button class="btn ghost" onclick="exportQA()">⬇ 导出</button>
+      <button class="btn danger" onclick="resetQA()">↺ 恢复默认</button>
+    </div>
+    <div class="count" id="qaCount"></div>
+    <div class="qa-edit" id="qaEdit"></div>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn ghost" onclick="closeAdmin()">关闭</button>
     </div>
   </div>
 </div>
@@ -255,9 +492,10 @@ async function loadQA(){
     }
   } catch(e){ /* 离线时用缓存 */ }
   if(QA_LOADED){
-    document.getElementById("statusLine").textContent = "在线 · 游客可自由提问；登录后可管理问答库";
+    document.getElementById("statusLine").textContent = "问答库已加载 · 直接输入问题，或点下方标签试试";
+    renderQA();
   } else {
-    document.getElementById("statusLine").textContent = "问答库加载失败，请检查网络或点「🔄 内容」刷新";
+    document.getElementById("statusLine").textContent = "问答库加载失败，请检查网络或刷新页面";
   }
 }
 
@@ -298,55 +536,95 @@ function stripFillers(s){
 }
 function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 
-const chat = document.getElementById("chat");
-const inp = document.getElementById("inp");
-function addMsg(text, who, isHtml){
-  const d = document.createElement("div");
-  d.className = "msg " + who;
-  if(who === "bot"){
-    const w = document.createElement("div"); w.className="who"; w.textContent="首义学长"; d.appendChild(w);
+function escAttr(s){ return String(s).replace(/'/g, "&#39;").replace(/"/g, "&quot;"); }
+function escHtml(s){ return String(s).replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+// ===== 渲染全部问答卡片 =====
+const qaList = document.getElementById("qaList");
+function renderQA(){
+  qaList.innerHTML = "";
+  if(!QA.length){
+    qaList.innerHTML = "<div style='text-align:center;color:#c3b8ae;padding:30px;'>问答库为空</div>";
+    return;
   }
-  const p = document.createElement("div");
-  if(isHtml) p.innerHTML = text; else p.textContent = text;
-  d.appendChild(p);
-  chat.appendChild(d); chat.scrollTop = chat.scrollHeight;
+  QA.forEach((it)=>{
+    const card = document.createElement("div");
+    card.className = "qa-card";
+    card.dataset.q = it.q;
+    card.innerHTML =
+      '<div class="qa-avatar">🎓</div>' +
+      '<div class="qa-main">' +
+        '<div class="qa-q" onclick="toggleCard(this)">' + escHtml(it.q) + '<span class="chev">▾</span></div>' +
+        '<div class="qa-a">' + escHtml(it.a) + '</div>' +
+      '</div>';
+    qaList.appendChild(card);
+  });
 }
-function addTyping(){
-  const d = document.createElement("div"); d.className="typing"; d.id="typing";
-  d.innerHTML = "<span></span><span></span><span></span>";
-  chat.appendChild(d); chat.scrollTop = chat.scrollHeight;
+function toggleCard(qEl){
+  qEl.closest(".qa-card").classList.toggle("open");
 }
-function removeTyping(){ const t=document.getElementById("typing"); if(t) t.remove(); }
-function reply(text){
-  addTyping();
-  setTimeout(()=>{ removeTyping(); addMsg(text, "bot"); }, 500);
+
+// 提问后：在列表顶部插入学长回答卡
+function addReply(text, highlightQ){
+  const card = document.createElement("div");
+  card.className = "reply-card";
+  card.innerHTML =
+    '<div class="qa-avatar">🎓</div>' +
+    '<div class="qa-main">' +
+      '<span class="reply-tag">首义学长</span>' +
+      '<div class="qa-a">' + escHtml(text) + '</div>' +
+    '</div>';
+  qaList.prepend(card);
+  if(highlightQ){
+    const target = document.querySelector('.qa-card[data-q="' + CSS.escape(highlightQ) + '"]');
+    if(target){ target.classList.add("match"); target.classList.add("open"); }
+  }
+  card.scrollIntoView({ behavior: "smooth", block: "start" });
 }
+
 function send(){
   const v = inp.value.trim();
   if(!v) return;
-  addMsg(v, "me"); inp.value = "";
-  if(QUIT_WORDS.has(v)){ setTimeout(()=>{ addMsg(pick(["好嘞，那学长先撤啦，祝你大学生活顺顺利利的～","行～有啥事随时回来找我，拜拜👋"]), "bot"); }, 200); return; }
-  if(HELP_WORDS.has(v)){ showHelp(); return; }
-  if(!QA_LOADED || QA.length===0){ reply("学长正在加载问答库，稍微等一下下哈～也可以点右上角「🔄 内容」刷新试试。"); return; }
+  inp.value = "";
+  if(QUIT_WORDS.has(v)){ addReply(pick(["好嘞，那学长先撤啦，祝你大学生活顺顺利利的～","行～有啥事随时回来找我，拜拜👋"])); return; }
+  if(HELP_WORDS.has(v)){ scrollToQA(); return; }
+  if(!QA_LOADED || QA.length===0){ addReply("学长正在加载问答库，稍微等一下下哈～也可以刷新页面试试。"); return; }
   const core = stripFillers(v);
   const [score, item] = bestMatch(v);
-  if(!core){ reply(pick(FALLBACKS)); return; }
+  if(!core){ addReply(pick(FALLBACKS)); return; }
   if(item && score >= THRESHOLD){
-    reply(pick(OPENERS) + "\n" + item.a.trim() + "\n" + pick(CLOSERS));
+    addReply(pick(OPENERS) + "\n\n" + item.a.trim() + "\n\n" + pick(CLOSERS), item.q);
   } else {
-    reply(pick(FALLBACKS));
+    addReply(pick(FALLBACKS));
   }
 }
-function showHelp(){
-  if(!QA_LOADED || QA.length===0){ reply("问答库还没加载好，点一下右上角「🔄 内容」刷新哈～"); return; }
-  const list = QA.map((it, i) => "<div>" + (i+1) + ". " + it.q + "</div>").join("");
-  addMsg("目前我知道这些话题（直接问就行）：<div class='help-list'>" + list + "</div>", "bot", true);
-}
-function quickAsk(q){ inp.value = q; send(); }
-const CHIPS = ["宿舍床多大？","四级啥时候能考？","图书馆几点关门？","校园能骑车吗？","食堂能用微信吗？","大一要早晚自习吗？"];
-const chipBox = document.getElementById("chips");
-CHIPS.forEach(q=>{ const b=document.createElement("button"); b.textContent=q; b.onclick=()=>quickAsk(q); chipBox.appendChild(b); });
+
+const inp = document.getElementById("inp");
 inp.addEventListener("keydown", e=>{ if(e.key==="Enter") send(); });
+
+// ===== 热门标签 =====
+const HOT_TAGS = [
+  { tag: "#宿舍", q: "宿舍床多大？" },
+  { tag: "#四六级", q: "大一可以考四级吗？" },
+  { tag: "#图书馆", q: "图书馆几点关门？" },
+  { tag: "#食堂", q: "食堂可以用微信直接付款吗？" },
+  { tag: "#校园骑行", q: "校园里面可以骑自行车吗？" },
+  { tag: "#早晚自习", q: "大一要早晚自习吗？" },
+];
+const hotBox = document.getElementById("hotTags");
+HOT_TAGS.forEach(t=>{
+  const b = document.createElement("button");
+  b.textContent = t.tag;
+  b.onclick = ()=>{ inp.value = t.q; send(); };
+  hotBox.appendChild(b);
+});
+
+function scrollToQA(){
+  document.getElementById("qaTitle").scrollIntoView({ behavior: "smooth", block: "start" });
+  if(QA_LOADED && QA.length){
+    document.getElementById("statusLine").textContent = "所有问题都在这儿，点一下问题就能展开答案～";
+  }
+}
 
 // ===== 登录（游客可自由提问；登录后才可改数据库并同步云端）=====
 function openLogin(){
@@ -391,13 +669,6 @@ if(localStorage.getItem(LS_ADMIN) === "1") enterAdmin();
 function showQR(){ document.getElementById("qrOverlay").classList.add("show"); }
 function closeQR(){ document.getElementById("qrOverlay").classList.remove("show"); }
 
-// ===== 内容刷新（游客/管理员都可拉最新）=====
-function refreshContent(){
-  addMsg("学长去帮你拉一下最新的问答库哈～", "bot");
-  LOCAL_DIRTY = false;  // 主动刷新时允许云端覆盖
-  loadQA();
-}
-
 // ===== 管理后台 =====
 function openAdmin(){
   renderEdit();
@@ -417,8 +688,6 @@ function renderEdit(){
     box.appendChild(div);
   });
 }
-function escAttr(s){ return String(s).replace(/'/g, "&#39;").replace(/"/g, "&quot;"); }
-function escHtml(s){ return String(s).replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 function addItem(){
   QA.push({ q: "新问题？", a: "新答案", toks: new Set() });
   LOCAL_DIRTY = true;
@@ -432,8 +701,8 @@ function saveLocalQA(){
   refreshTokens(QA);
   saveLocal(QA);
   LOCAL_DIRTY = true;
+  renderQA();
   document.getElementById("qaCount").textContent = "已存本机 · 共 " + QA.length + " 条";
-  reply("学长已把最新问答存到本机啦～本机访问立刻生效。");
 }
 function resetQA(){
   if(!confirm("确定恢复为默认问答（本机修改会清空，且会重新从云端拉取）？")) return;
@@ -475,19 +744,14 @@ async function saveToCloud(){
     if(!putR.ok) throw new Error("写入仓库失败 " + putR.status);
     saveLocal(QA);
     LOCAL_DIRTY = true;
+    renderQA();
     document.getElementById("qaCount").textContent = "已同步云端 · 共 " + QA.length + " 条";
     alert("✅ 已保存到云端！GitHub Pages 会在几分钟内重新部署，其他人刷新页面即可看到新内容。");
   } catch(e){ alert("云端保存失败：" + e.message); }
 }
 
-// 欢迎语 + 启动加载
-addMsg("学弟学妹你好呀～我是首义的学长，关于学校吃住行、选课、宿舍、证件这些事儿都可以问我。正在帮你加载问答库，稍等一下下哈～", "bot");
-loadQA().then(()=>{
-  if(!welcomed && QA_LOADED){
-    welcomed = true;
-    addMsg("好了，问答库加载完成！直接输入你的问题就行；点右上角「全部话题」看我能答的所有问题～", "bot");
-  }
-});
+// 启动：渲染问答列表
+loadQA();
 </script>
 </body>
 </html>
