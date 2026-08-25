@@ -1,7 +1,6 @@
-import { QA_DATA } from './qa.js';   // 从 qa.js 导入数据
-
+// src/data/index.js
 export const DATA = {
-  qa: QA_DATA,   // ← 这里是关键，必须指向 QA_DATA
+  qa: [],   // 由 main.js 加载填充
 
   policies: [
     { title: '《学生管理规定》', desc: '学校学生管理总纲领，学生权利、义务、日常管理总要求。', link: ' ' },
