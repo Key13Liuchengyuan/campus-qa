@@ -1,0 +1,9 @@
+.qa-page{
+  padding:20px;
+}
+.chat-box{
+  background:#f8f8f8;
+  border-radius:10px;
+  min-height:400px;
+  margin-top:16px;
+}
