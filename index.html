@@ -346,6 +346,7 @@
 <!-- ===== 底部 ===== -->
 <footer class="foot">
   <span>© 2026 首义学长 · 武昌首义学院校园问答助手</span>
+  <span style="opacity:.75">AI 回答由模型结合资料库生成，仅供参考，请以学校官方通知为准</span>
   <button class="foot-btn" onclick="showQR()">💬 添加学长微信</button>
 </footer>
 
@@ -390,11 +391,11 @@
 <div class="overlay" id="aiOverlay">
   <div class="panel admin-panel">
     <h3>🤖 AI 设置（RAG 增强）</h3>
-    <div class="sub">开启后，提问会先语义检索资料库，再把资料喂给 AI 生成答案。Key 仅存你本机浏览器，不进源码、不暴露给访客。</div>
+    <div class="sub">开启后，提问会先语义检索资料库，再把资料喂给 AI 生成答案。Key 仅存你本机浏览器，不进源码、不暴露给访客。<b>Embedding 留空时，自动使用浏览器本地免费语义检索（对所有访客生效，无需任何 Key）。</b></div>
     <div class="field"><label>接口地址（OpenAI 兼容，含 /v1）</label><input id="aiBase" placeholder="https://api.deepseek.com/v1" autocomplete="off" /></div>
     <div class="field"><label>API Key</label><input id="aiKey" type="password" placeholder="sk-..." autocomplete="off" /></div>
     <div class="field"><label>对话模型</label><input id="aiChat" placeholder="deepseek-chat / gpt-4o-mini / qwen-..." autocomplete="off" /></div>
-    <div class="field"><label>Embedding 模型（可选，留空则用中文全文检索）</label><input id="aiEmbed" placeholder="text-embedding-3-small（留空也可）" autocomplete="off" /></div>
+    <div class="field"><label>Embedding 模型（可选。DeepSeek 无 embedding 接口，<b>留空即可</b>，系统会自动用本地免费语义检索）</label><input id="aiEmbed" placeholder="text-embedding-3-small（DeepSeek 用户请留空）" autocomplete="off" /></div>
     <div class="field"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="aiOn" style="width:auto" /> 启用 AI 生成答案（关掉则只做检索、不调用 AI）</label></div>
     <div class="btn-row">
       <button class="btn ghost" onclick="closeAI()">取消</button>
@@ -827,7 +828,7 @@ async function saveToCloud(){
 loadQA();
 </script>
 
-<!-- ===== RAG 模块：Orama 向量库 + OpenAI 兼容 AI 生成 ===== -->
+<!-- ===== RAG 模块：语义检索（本地免费向量 / API embedding / 全文兜底）+ AI 生成 ===== -->
 <script type="module">
 let oramaMod = null;
 async function getOrama(){
@@ -835,36 +836,102 @@ async function getOrama(){
   oramaMod = await import('https://cdn.jsdelivr.net/npm/orama@3.1.3/+esm');
   return oramaMod;
 }
-const RAG = { ready:false, embeddingEnabled:false, db:null, dims:0 };
+const RAG = { ready:false, embeddingEnabled:false, db:null, dims:0, embedSrc:null };
 function aiCfg(){ return (typeof window.loadAICfg === 'function') ? window.loadAICfg() : null; }
+
+// ---------- 本地免费语义检索（transformers.js，浏览器内跑向量模型，对所有访客生效）----------
+let tfPromise = null;
+function loadTransformers(){
+  if(tfPromise) return tfPromise;
+  tfPromise = new Promise((resolve, reject) => {
+    const urls = [
+      'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js',
+      'https://unpkg.com/@xenova/transformers@2.17.2/dist/transformers.min.js'
+    ];
+    let i = 0;
+    (function tryNext(){
+      if(i >= urls.length){ reject(new Error('transformers.js 加载失败')); return; }
+      const s = document.createElement('script');
+      s.src = urls[i++];
+      s.onload = () => resolve(window.transformers);
+      s.onerror = () => tryNext();
+      document.head.appendChild(s);
+    })();
+  });
+  return tfPromise;
+}
+let localExtractor = null;
+async function localEmbed(texts){
+  const tf = await loadTransformers();
+  if(tf && tf.env){
+    // 优先国内镜像 hf-mirror.com（墙内可访问），失败自动回退官方源
+    tf.env.allowRemoteModels = true;
+    tf.env.remoteHost = 'https://hf-mirror.com';
+    tf.env.remotePathTemplate = '{model}/resolve/{revision}/';
+  }
+  if(!localExtractor){
+    localExtractor = await tf.pipeline('feature-extraction', 'Xenova/bge-small-zh-v1.5');
+  }
+  const out = await localExtractor(texts, { pooling:'mean', normalize:true });
+  const arr = Array.isArray(out) ? out : [out];
+  return arr.map(t => Array.from(t.data));
+}
+// 页面空闲时预加载本地模型，首次提问不再等待
+if('requestIdleCallback' in window){
+  requestIdleCallback(() => { try { localEmbed(['预加载']); } catch(e){} }, { timeout: 8000 });
+}
+// ---------------------------------------------------------
 
 RAG.ensure = async (qa) => {
   if(RAG.ready) return;
   RAG.ready = true;
   const cfg = aiCfg();
+  // 1) 配置了 API embedding → 优先 API（质量最好）
   if(cfg && cfg.key && cfg.embedModel){
     try {
-      const vecs = await loadVectors(qa, cfg);
+      const vecs = await loadVectors(qa, cfg, 'api');
       if(vecs && vecs.length === qa.length && vecs[0] && vecs[0].length){
-        const { create, insertMultiple } = await getOrama();
-        RAG.dims = vecs[0].length;
-        RAG.db = create({ schema: { q:'string', a:'string', embedding:{ type:'vector', dims:RAG.dims, similarity:'cosine' } } });
-        await insertMultiple(RAG.db, qa.map((it,i)=>({ q: it.q, a: it.a, embedding: vecs[i] })));
-        RAG.embeddingEnabled = true;
-        console.log('[RAG] 向量索引就绪，维度', RAG.dims);
+        await buildIndex(qa, vecs);
+        RAG.embedSrc = 'api';
+        console.log('[RAG] API 向量索引就绪，维度', RAG.dims);
         return;
       }
-    } catch(e){ console.warn('[RAG] 向量索引构建失败，改用中文全文检索', e); }
+    } catch(e){ console.warn('[RAG] API embedding 失败，尝试本地模型', e); }
   }
-  RAG.db = null; RAG.embeddingEnabled = false;
+  // 2) 否则 → 浏览器本地向量模型（免费，所有访客可用）
+  try {
+    const vecs = await loadVectors(qa, null, 'local');
+    if(vecs && vecs.length === qa.length && vecs[0] && vecs[0].length){
+      await buildIndex(qa, vecs);
+      RAG.embedSrc = 'local';
+      console.log('[RAG] 本地向量索引就绪，维度', RAG.dims);
+      return;
+    }
+  } catch(e){ console.warn('[RAG] 本地向量模型不可用，降级中文全文检索', e); }
+  // 3) 都没有 → 中文全文检索兜底
+  RAG.db = null; RAG.embeddingEnabled = false; RAG.embedSrc = null;
 };
+
+async function buildIndex(qa, vecs){
+  const { create, insertMultiple } = await getOrama();
+  RAG.dims = vecs[0].length;
+  RAG.db = create({ schema: { q:'string', a:'string', embedding:{ type:'vector', dims:RAG.dims, similarity:'cosine' } } });
+  await insertMultiple(RAG.db, qa.map((it,i)=>({ q: it.q, a: it.a, embedding: vecs[i] })));
+  RAG.embeddingEnabled = true;
+}
 
 function simpleHash(s){ let h=5381; for(let i=0;i<s.length;i++){ h=((h<<5)+h+s.charCodeAt(i))>>>0; } return h.toString(36); }
 
-async function loadVectors(qa, cfg){
-  const key = 'wsy_rag_vecs_v1_' + (cfg.embedModel||'') + '_' + simpleHash(qa.map(x=>x.q+'|'+x.a).join('\n'));
+async function loadVectors(qa, cfg, src){
+  const modelKey = (src === 'local') ? 'local-bge-small-zh' : (cfg ? (cfg.embedModel||'') : '');
+  const key = 'wsy_rag_vecs_v1_' + src + '_' + modelKey + '_' + simpleHash(qa.map(x=>x.q+'|'+x.a).join('\n'));
   try { const c = localStorage.getItem(key); if(c){ const a = JSON.parse(c); if(Array.isArray(a) && a.length === qa.length && a[0] && Array.isArray(a[0])) return a; } } catch(e){}
-  const vecs = await embed(qa.map(it=>it.q), cfg);
+  let vecs = null;
+  if(src === 'local'){
+    vecs = await localEmbed(qa.map(it=>it.q));
+  } else if(cfg){
+    vecs = await embed(qa.map(it=>it.q), cfg);
+  }
   if(vecs && vecs.length === qa.length){ try { localStorage.setItem(key, JSON.stringify(vecs)); } catch(e){} return vecs; }
   return null;
 }
@@ -877,14 +944,27 @@ async function embed(texts, cfg){
   return j.data.map(d => d.embedding);
 }
 
+async function queryEmbedding(q){
+  const cfg = aiCfg();
+  if(RAG.embedSrc === 'api' && cfg && cfg.key && cfg.embedModel){
+    const vecs = await embed([q], cfg);
+    return vecs && vecs[0];
+  }
+  if(RAG.embedSrc === 'local'){
+    const vecs = await localEmbed([q]);
+    return vecs && vecs[0];
+  }
+  return null;
+}
+
 RAG.retrieve = async (q, k) => {
   await RAG.ensure(window.getQA());
   if(RAG.embeddingEnabled && RAG.db){
     try {
-      const vecs = await embed([q], aiCfg());
-      if(vecs && vecs[0]){
+      const vec = await queryEmbedding(q);
+      if(vec){
         const { search } = await getOrama();
-        const res = search(RAG.db, { mode:'vector', vector:{ embedding: vecs[0] }, limit: k });
+        const res = search(RAG.db, { mode:'vector', vector:{ embedding: vec }, limit: k });
         const out = (res.hits||[]).map(h => ({ q: h.document.q, a: h.document.a, score: h.score }));
         if(out.length) return out;
       }
@@ -904,6 +984,8 @@ async function askAI(q, context){
   return ((j.choices && j.choices[0] && j.choices[0].message.content) || '').trim();
 }
 
+const AI_DISCLAIMER = '\n\n—\n*本回答由 AI 结合资料库生成，仅供参考，请以学校官方通知为准。*';
+
 RAG.send = async (rawV) => {
   const v = rawV;
   const qa = window.getQA ? window.getQA() : [];
@@ -911,27 +993,29 @@ RAG.send = async (rawV) => {
   const core = window.stripFillers(v);
   if(!core){ window.addReply(window.pick(window.FALLBACKS)); return; }
   const status = document.getElementById('statusLine');
-  status.textContent = '🔍 正在语义检索相关资料…';
+  const modeLabel = (RAG.embedSrc === 'local') ? '本地语义检索' : ((RAG.embedSrc === 'api') ? '语义检索' : '关键词检索');
+  status.textContent = '🔍 正在' + modeLabel + '相关资料…';
   let hits = [];
   try { hits = await RAG.retrieve(v, 3); } catch(e){ hits = (window.topMatches?window.topMatches(v,3):[]); }
   const cfg = aiCfg();
-  let answer = null;
+  let answer = null, isAI = false;
   if(cfg && cfg.enabled && cfg.key){
     status.textContent = '🤖 学长思考中…';
     try {
       const ctx = hits.map((h,i)=>`【资料${i+1}】\n问：${h.q}\n答：${h.a}`).join('\n\n');
       answer = await askAI(v, ctx);
+      isAI = true;
     } catch(e){ console.error('[RAG] AI 调用失败', e); answer = hits[0] ? hits[0].a : null; }
   } else {
     answer = hits[0] ? hits[0].a : null;
   }
   if(!answer){ window.addReply(window.pick(window.FALLBACKS)); status.textContent = defaultStatus(); return; }
-  if(cfg && cfg.enabled && cfg.key){
-    window.addReply(answer);
+  if(isAI){
+    window.addReply(answer + AI_DISCLAIMER);
   } else {
     window.addReply(window.pick(window.OPENERS) + '\n\n' + answer.trim() + '\n\n' + window.pick(window.CLOSERS), hits[0] && hits[0].q);
   }
-  status.textContent = (cfg && cfg.enabled && cfg.key) ? '✅ 已用 AI + 资料库回答' : defaultStatus();
+  status.textContent = isAI ? '✅ 已用 AI + 资料库回答' : defaultStatus();
 };
 
 function defaultStatus(){
