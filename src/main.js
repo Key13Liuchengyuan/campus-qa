@@ -4,6 +4,8 @@ import { DATA } from './data/index.js';
 import { Storage, IDB, KEYS } from './utils/storage.js';
 import { showToast, initModalEvents } from './utils/toast.js';
 import { refreshIcons } from './utils/icons.js';
+import { initTilt } from './effects/tilt.js';
+import { initFluidTail } from './effects/fluid.js';
 
 // 从根目录加载 qa_data.txt 并解析
 async function loadQAFromFile() {
@@ -64,6 +66,10 @@ export async function init() {
   }
 
   bootstrap();
+
+  // 视觉特效（CDF / H 成员负责）
+  initTilt();
+  if (APP_CONFIG.features.ripple) initFluidTail();
 
   console.log(`[wenzhou] ${APP_CONFIG.platformName} ${APP_CONFIG.version} init ok`);
 }
